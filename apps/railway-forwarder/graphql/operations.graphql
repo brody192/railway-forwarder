@@ -1,0 +1,32 @@
+query Workspaces {
+  externalWorkspaces { id name projects { id name } }
+}
+
+query ProjectDetail($id: String!) {
+  project(id: $id) {
+    environments {
+      edges { node { id name serviceInstances { edges { node { id serviceId } } } } }
+    }
+    services { edges { node { id name } } }
+  }
+}
+
+query ServiceInstance($environmentId: String!, $serviceId: String!) {
+  serviceInstance(environmentId: $environmentId, serviceId: $serviceId) { id }
+}
+
+query ServiceProject($id: String!) {
+  service(id: $id) { projectId }
+}
+
+query EnvironmentProject($id: String!) {
+  environment(id: $id) { projectId }
+}
+
+query SshPublicKeys {
+  sshPublicKeys(first: 100) { edges { node { publicKey } } }
+}
+
+mutation CreateSshPublicKey($input: SshPublicKeyCreateInput!) {
+  sshPublicKeyCreate(input: $input) { id }
+}

@@ -1,0 +1,12 @@
+[package]
+name = "macos-status-menu"
+version.workspace = true
+edition.workspace = true
+description = "Native AppKit status menus with Liquid Glass switches and copyable rows"
+readme = "README.md"
+
+[dependencies]
+objc2.workspace = true
+objc2-foundation.workspace = true
+objc2-app-kit.workspace = true
+objc2-quartz-core = "0.3"
