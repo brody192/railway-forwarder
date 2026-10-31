@@ -1,14 +1,15 @@
 use super::*;
 use serde_json::{Value, json};
 
+struct Scratch(std::path::PathBuf);
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 #[test]
 fn sign_out_preserves_saved_ports_and_menu_preferences_across_restarts() {
-    struct Scratch(std::path::PathBuf);
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
     let scratch = Scratch(std::env::temp_dir().join(format!("rf-sign-out-{}", Uuid::new_v4())));
     let files = Files {
         app: scratch.0.join("settings"),
@@ -24,6 +25,7 @@ fn sign_out_preserves_saved_ports_and_menu_preferences_across_restarts() {
         .insert("project/p1".into(), "Custom project".into());
     data.preferences.menu.section_order = vec!["w2/p2".into(), "w1/p1".into()];
     let first = data.preferences.allowed[0].clone();
+    data.preferences.active_tunnels = vec![first.id()];
     data.preferences.menu.port_order = vec![first.id()];
     let preferences = serde_json::to_value(&data.preferences).unwrap();
     persistence::write(&files.settings(), &data.preferences).unwrap();
@@ -34,6 +36,7 @@ fn sign_out_preserves_saved_ports_and_menu_preferences_across_restarts() {
     assert!(backend.snapshot().signed_in);
     backend.mutate(|state| {
         state.data.email = Some("you@example.com".into());
+        state.data.login_item = crate::domain::LoginItemStatus::Enabled;
         state.data.workspaces = data.workspaces;
     });
     assert!(backend.tunnels.begin(&first).unwrap().is_some());
@@ -51,6 +54,10 @@ fn sign_out_preserves_saved_ports_and_menu_preferences_across_restarts() {
     let signed_out = backend.snapshot();
     assert!(!signed_out.signed_in);
     assert!(signed_out.email.is_none());
+    assert_eq!(
+        signed_out.login_item,
+        crate::domain::LoginItemStatus::Enabled
+    );
     assert!(signed_out.menu.sections.is_empty());
     assert!(backend.state.lock().unwrap().tunnels.is_empty());
     assert!(!files.credentials.join("tokens.json").exists());
@@ -102,6 +109,106 @@ fn sign_out_preserves_saved_ports_and_menu_preferences_across_restarts() {
             .flat_map(|section| &section.ports)
             .all(|port| !port.is_on)
     );
+}
+
+#[test]
+fn restore_uses_only_last_enabled_tunnels_once_and_manual_actions_forget_them() {
+    let before = Backend::new(true).unwrap();
+    let ports = before.snapshot().preferences.allowed;
+    let first = &ports[0];
+    let second = &ports[1];
+    for port in [first, second] {
+        before.dispatch(json!({"action":"forwardPort","id":port.id(),"enabled":true}));
+    }
+    assert!(!before.snapshot().preferences.restore_tunnels_on_launch);
+    assert_eq!(before.snapshot().preferences.active_tunnels.len(), 2);
+    before.dispatch(json!({"action":"forwardPort","id":first.id(),"enabled":false}));
+    before.tunnel_state(
+        &second.id(),
+        Some(TunnelState::Failed("Temporary outage".into())),
+    );
+    before.shutdown();
+    let remembered = before.snapshot().preferences;
+    assert_eq!(remembered.active_tunnels, vec![second.id()]);
+
+    let disabled = Backend::new(true).unwrap();
+    disabled.mutate(|state| state.data.preferences = remembered.clone());
+    disabled.restore_tunnels_on_launch();
+    assert!(disabled.state.lock().unwrap().tunnels.is_empty());
+    disabled.dispatch(json!({"action":"restoreTunnelsOnLaunch","enabled":true}));
+    disabled.restore_tunnels_on_launch();
+    assert!(disabled.state.lock().unwrap().tunnels.is_empty());
+
+    let restarted = Backend::new(true).unwrap();
+    restarted.mutate(|state| {
+        state.data.preferences = remembered;
+        state.data.preferences.restore_tunnels_on_launch = true;
+    });
+    restarted.restore_tunnels_on_launch();
+    assert_eq!(restarted.state.lock().unwrap().tunnels.len(), 1);
+    assert_eq!(
+        restarted.state.lock().unwrap().tunnels[&second.id()],
+        TunnelState::Connected
+    );
+    restarted.stop_all();
+    restarted.restore_tunnels_on_launch();
+    assert!(restarted.state.lock().unwrap().tunnels.is_empty());
+    restarted.dispatch(json!({"action":"disconnect"}));
+    assert!(restarted.snapshot().preferences.active_tunnels.is_empty());
+    restarted.dispatch(json!({"action":"forwardPort","id":second.id(),"enabled":true}));
+    restarted.dispatch(
+        json!({"action":"allowPort", "workspaceID":second.workspace_id,
+        "projectID":second.project_id, "environmentID":second.environment_id,
+        "serviceID":second.service_id, "port":second.remote, "enabled":false}),
+    );
+    assert!(restarted.snapshot().preferences.active_tunnels.is_empty());
+    assert!(restarted.state.lock().unwrap().tunnels.is_empty());
+}
+
+#[test]
+fn active_tunnels_persist_to_the_settings_file_and_signed_out_launch_does_not_connect() {
+    let scratch = Scratch(std::env::temp_dir().join(format!("rf-restore-{}", Uuid::new_v4())));
+    let files = Files {
+        app: scratch.0.join("settings"),
+        credentials: scratch.0.join("credentials"),
+    };
+    let mut data = Snapshot::default();
+    seed_demo(&mut data);
+    data.preferences.client_id = "test-client".into();
+    data.preferences.restore_tunnels_on_launch = true;
+    data.preferences.allowed[0].local_port = 15432;
+    let first = data.preferences.allowed[0].clone();
+    persistence::write(&files.settings(), &data.preferences).unwrap();
+    persistence::write(
+        &files.credentials.join("tokens.json"),
+        &json!({"accessToken":"test", "refreshToken":"refresh", "expiresAt":900000000.}),
+    )
+    .unwrap();
+    let backend = Backend::with_files(false, files.clone()).unwrap();
+    // Exercise persistence without opening any real SSH or API connections.
+    backend.tunnel_state(&first.id(), Some(TunnelState::Connecting));
+    backend.tunnel_state(&first.id(), Some(TunnelState::Connected));
+    backend.tunnel_state(&first.id(), Some(TunnelState::Failed("Offline".into())));
+    backend.shutdown();
+    drop(backend);
+    let saved: Preferences = persistence::read(&files.settings()).unwrap().unwrap();
+    assert!(saved.restore_tunnels_on_launch);
+    assert_eq!(saved.active_tunnels, vec![first.id()]);
+    assert_eq!(saved.tunnels_to_restore()[0].local_port, 15432);
+
+    persistence::delete(&files.credentials.join("tokens.json")).unwrap();
+    let signed_out = Backend::with_files(false, files.clone()).unwrap();
+    signed_out.restore_tunnels_on_launch();
+    assert!(!signed_out.snapshot().signed_in);
+    assert!(signed_out.state.lock().unwrap().tunnels.is_empty());
+    assert_eq!(
+        signed_out.snapshot().preferences.active_tunnels,
+        vec![first.id()]
+    );
+    signed_out.disconnect_all();
+    let saved: Preferences = persistence::read(&files.settings()).unwrap().unwrap();
+    assert!(saved.active_tunnels.is_empty());
+    assert_eq!(saved.allowed.len(), data.preferences.allowed.len());
 }
 
 #[test]

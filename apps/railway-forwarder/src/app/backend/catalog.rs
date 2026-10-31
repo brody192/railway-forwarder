@@ -3,6 +3,7 @@ use crate::domain::{Environment, Project, Service};
 use std::sync::Arc;
 impl Backend {
     pub fn warm_up(self: &Arc<Self>) {
+        self.restore_tunnels_on_launch();
         let state = self.state.lock().unwrap();
         if state.data.signed_in && !state.data.demo {
             let generation = state.generation;

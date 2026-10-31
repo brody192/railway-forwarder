@@ -19,6 +19,7 @@ apps/
           search.rs          Direct UUID lookup and cancellable bounded search
           commands.rs        Settings command validation and dispatch
           session.rs         Sign-in and sign-out transitions
+          tunnels.rs         Forwarding lifecycle and remembered startup intent
           diagnostics.rs     Headless catalog, search and SSH checks
           demo.rs            In-memory preview data
           tests.rs           State and command regression tests
@@ -27,6 +28,7 @@ apps/
         ports.rs             Allowed ports, identities and tunnel states
         preferences.rs       Persisted user preferences
         snapshot.rs          Data exposed to the UI
+        startup.rs           Login-item registration and approval states
         names.rs             Global display-name resolution
         menu.rs              Pure menu layout and ordering
         catalog.rs           Pure search and selection filtering
@@ -40,6 +42,7 @@ apps/
         macos/
           menu.rs            App model and SDK event translation
           oauth.rs           AuthenticationServices browser sessions
+          login_item.rs      ServiceManagement main-app login registration
           preview.rs         Native control review window
       ui/
         controls.rs          Shared button cursors and disabled-state styling
@@ -52,6 +55,7 @@ apps/
           results.rs         Stable search results and explicitly requested child updates
           menu.rs            Editable menu preview and drag ordering
           account.rs         Account controls
+          general.rs         Login items, approval status and tunnel restoration
           names.rs           Reactive display-name inputs
           inputs.rs          Shared input creation and focus behavior
       persistence.rs         Protected local JSON storage and filesystem paths

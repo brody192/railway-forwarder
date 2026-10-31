@@ -30,6 +30,7 @@ impl Render for SettingsView {
         for (tab, id, label, icon) in [
             (Tab::Services, "services", "Services", IconName::Server),
             (Tab::Menu, "menu", "Menu", IconName::List),
+            (Tab::General, "general", "General", IconName::Settings),
             (Tab::Account, "account", "Account", IconName::User),
         ] {
             sidebar = sidebar.child(
@@ -48,6 +49,9 @@ impl Render for SettingsView {
                     .when(self.tab == tab, |button| button.bg(cx.theme().secondary))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.tab = tab;
+                        if tab == Tab::General {
+                            crate::app::events::emit(crate::app::events::Event::RefreshLoginItem);
+                        }
                         cx.notify();
                     })),
             );
@@ -87,6 +91,8 @@ impl Render for SettingsView {
             body = body.child(self.account(cx));
         } else if self.tab == Tab::Menu {
             body = body.child(self.menu_editor(window, cx));
+        } else if self.tab == Tab::General {
+            body = body.child(self.general(window, cx));
         } else {
             body = body.child(
                 div()

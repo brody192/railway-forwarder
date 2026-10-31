@@ -1,4 +1,5 @@
 //! Main-thread macOS adapters. The reusable controls live in macos-status-menu.
+pub(crate) mod login_item;
 mod menu;
 mod oauth;
 mod preview;

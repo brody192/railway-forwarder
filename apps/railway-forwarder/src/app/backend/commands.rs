@@ -38,7 +38,14 @@ impl Backend {
         let value = command.value.as_deref().unwrap_or("");
         let generation = self.state.lock().unwrap().generation;
         match command.action.as_str() {
-            "quit" | "disconnect" => self.stop_all(),
+            "quit" => self.stop_all(),
+            "disconnect" => self.disconnect_all(),
+            "restoreTunnelsOnLaunch" => {
+                self.mutate(|state| {
+                    state.data.preferences.restore_tunnels_on_launch = command.enabled == Some(true)
+                });
+                self.save()?;
+            }
             "showMenu" => crate::app::events::show_menu(),
             "dismissError" => self.mutate(|state| state.data.error = None),
             "refreshAccount" => {
@@ -161,23 +168,8 @@ impl Backend {
                     .cloned()
                     .context("This port is no longer available.")?;
                 if command.enabled == Some(true) {
-                    if snapshot.demo {
-                        self.tunnel_state(id, Some(TunnelState::Connected));
-                    } else {
-                        match self.tunnels.begin(&port) {
-                            Ok(Some(attempt)) => {
-                                self.tunnel_state(id, Some(TunnelState::Connecting));
-                                let backend = self.clone();
-                                let tunnels = self.tunnels.clone();
-                                self.runtime.spawn(async move {
-                                    tunnels.connect(backend, port, attempt, generation).await;
-                                });
-                            }
-                            Ok(None) => {}
-                            Err(error) => {
-                                self.tunnel_state(id, Some(TunnelState::Failed(error.to_string())))
-                            }
-                        }
+                    if let Err(error) = self.start_tunnel(port) {
+                        self.tunnel_state(id, Some(TunnelState::Failed(error.to_string())));
                     }
                 } else {
                     self.stop(id);

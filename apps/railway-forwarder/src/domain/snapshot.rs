@@ -1,4 +1,4 @@
-use super::{DisplayNameLabel, MenuLayout, Port, Preferences, Workspace};
+use super::{DisplayNameLabel, LoginItemStatus, MenuLayout, Port, Preferences, Workspace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -9,6 +9,8 @@ pub struct Snapshot {
     pub email: Option<String>,
     pub busy: bool,
     pub demo: bool,
+    #[serde(default)]
+    pub login_item: LoginItemStatus,
     pub error: Option<String>,
     pub workspaces: Vec<Workspace>,
     pub preferences: Preferences,

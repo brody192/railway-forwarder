@@ -15,6 +15,9 @@ pub enum Event {
     },
     AuthFinished(Uuid),
     ShowMenu,
+    RefreshLoginItem,
+    SetStartAtLogin(bool),
+    OpenLoginItems,
 }
 static EVENTS: OnceLock<async_channel::Sender<Event>> = OnceLock::new();
 static BACKEND: OnceLock<Arc<Backend>> = OnceLock::new();
@@ -28,6 +31,7 @@ pub fn start() -> async_channel::Receiver<Event> {
         .ok()
         .expect("backend initialized once");
     crate::platform::macos::initialize();
+    refresh_login_item();
     render_menu();
     backend.warm_up();
     receiver
@@ -42,6 +46,35 @@ pub fn open_settings() {
 }
 pub fn changed() {
     emit(Event::Changed);
+}
+pub fn refresh_login_item() {
+    if let Some(backend) = BACKEND.get() {
+        if let Some(current) = backend.login_item_status() {
+            let status = crate::platform::macos::login_item::status();
+            if status != current {
+                backend.update_login_item(status, None);
+            }
+        }
+    }
+}
+pub fn set_start_at_login(enabled: bool) {
+    if let Some(backend) = BACKEND
+        .get()
+        .filter(|backend| backend.login_item_status().is_some())
+    {
+        let error = crate::platform::macos::login_item::set_enabled(enabled)
+            .err()
+            .map(|error| error.to_string());
+        backend.update_login_item(crate::platform::macos::login_item::status(), error);
+    }
+}
+pub fn open_login_items() {
+    if BACKEND
+        .get()
+        .is_some_and(|backend| backend.login_item_status().is_some())
+    {
+        crate::platform::macos::login_item::open_settings();
+    }
 }
 pub fn show_menu() {
     emit(Event::ShowMenu);

@@ -11,7 +11,11 @@ open "dist/Railway Forwarder.app"
 
 The app stays in the menu bar without a Dock icon. Its native menu has a Railway Forwarder header, project sections with workspace labels, the selected ports, a Disconnect action between separators, then Settings and Quit. Every port stays at the top level with its own switch. These actions have no icons, shortcuts, or ellipses. Launching or reopening the app keeps settings closed, including on first launch. Choose Settings or Sign in with Railway from the menu to open the window. The explicit `--settings` launch flag also opens it.
 
-The app is entirely Rust. GPUI owns the application event loop and settings window. Rust calls AppKit and AuthenticationServices directly through objc2 for the native status menu, Liquid Glass switches and OAuth browser. OAuth, API transport, credential files and SSH management also run in Rust. Credentials stay out of the settings model. The build script packages and signs one executable.
+Enable **Settings → General → Start at login** to open the app automatically when you sign in to macOS. The switch uses Apple's native ServiceManagement API and reflects macOS's current login-item state, including changes made in System Settings. While General is open, it checks for changes once a second even when the window is unfocused, updating the UI only when the state changes. If approval is required, use **Open Login Items** to approve it there. Registration belongs to this Mac user and survives signing out of Railway. Automatic launch keeps Settings closed. Keep the app in its permanent location before enabling this option.
+
+**Settings → General → Restore active tunnels on launch** reconnects the last enabled tunnels when the app starts with a saved Railway session. This is off by default and independent of Start at login. Tunnel switches are always remembered in `settings.json`, even while restoration is disabled. Quitting and signing out preserve that memory; switching a tunnel off, unselecting its port, or choosing Disconnect removes it. Failed connection attempts remain remembered for the next launch. Restoration tries each remembered, still-selected port once, using its saved local port; it does not scan for new ports or continuously retry failures. Changing the setting only affects future launches.
+
+The app is entirely Rust. GPUI owns the application event loop and settings window. Rust calls AppKit, AuthenticationServices and ServiceManagement directly through objc2 for the native status menu, Liquid Glass switches, OAuth browser and login-item registration. OAuth, API transport, credential files and SSH management also run in Rust. Credentials stay out of the settings model. The build script packages and signs one executable.
 
 ## Reusable SDKs
 
@@ -48,7 +52,7 @@ The Menu tab previews the same layout used by the native menu. Drag project head
 6. Use the switch beside a port in the menu to toggle its tunnel. Each port occupies one line; a different local port is shown as `local → remote`.
 7. Click a port’s service label or secondary text to copy its local address, such as `127.0.0.1:8080`. The address uses the configured local port, even when the tunnel is off.
 
-Nothing is forwarded until its switch is enabled. Unchecking a port, signing out, or quitting stops its tunnel. Closing settings keeps tunnels running. Tunnels are not automatically enabled on launch or reconnected after failures.
+Nothing is forwarded until its switch is enabled or startup restoration reconnects a remembered tunnel. Unchecking a port, signing out, or quitting stops its tunnel. Closing settings keeps tunnels running. Startup restoration is opt-in; failed connections can be retried manually or on the next launch with restoration enabled.
 
 Selected ports, local port mappings, display-name overrides and menu ordering are saved together in `~/Library/Application Support/Railway Forwarder/settings.json`. Signing out preserves these preferences. Saved ports reappear after signing in, with forwarding switched off.
 

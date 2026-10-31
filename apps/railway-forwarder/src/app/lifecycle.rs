@@ -33,6 +33,10 @@ fn open_settings(cx: &mut App) -> Result<(AnyWindowHandle, Entity<SettingsView>)
 }
 
 pub(crate) fn run() {
+    if std::env::args().any(|arg| arg == "--check-start-at-login") {
+        println!("{}", macos::login_item::diagnostic_status());
+        return;
+    }
     if let Some(index) = std::env::args().position(|arg| arg == "--check-search") {
         let result = std::env::args()
             .nth(index + 1)
@@ -113,6 +117,9 @@ pub(crate) fn run() {
                     events::Event::Authenticate { url, reply } => macos::authenticate(url, reply),
                     events::Event::AuthFinished(id) => macos::finish_auth(id),
                     events::Event::ShowMenu => macos::show_menu(),
+                    events::Event::RefreshLoginItem => events::refresh_login_item(),
+                    events::Event::SetStartAtLogin(enabled) => events::set_start_at_login(enabled),
+                    events::Event::OpenLoginItems => events::open_login_items(),
                 });
             }
         })

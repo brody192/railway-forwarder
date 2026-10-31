@@ -7,6 +7,7 @@ mod search;
 mod session;
 #[cfg(test)]
 mod tests;
+mod tunnels;
 use crate::{
     domain::{Preferences, Snapshot, TunnelState, display_names, menu_layout, project_catalog},
     integrations::railway::OAuth,
@@ -30,6 +31,7 @@ struct State {
     loads: HashMap<String, Uuid>,
     tunnels: HashMap<String, TunnelState>,
     search_request: Option<SearchRequest>,
+    startup_restore_attempted: bool,
 }
 pub struct Backend {
     state: Mutex<State>,
@@ -97,6 +99,7 @@ impl Backend {
                 loads: HashMap::new(),
                 tunnels: HashMap::new(),
                 search_request: None,
+                startup_restore_attempted: false,
             }),
             api: Railway {
                 oauth: Arc::new(oauth),
@@ -129,6 +132,23 @@ impl Backend {
         data.loading.sort();
         data
     }
+    pub fn login_item_status(&self) -> Option<crate::domain::LoginItemStatus> {
+        let state = self.state.lock().unwrap();
+        (!state.data.demo).then_some(state.data.login_item)
+    }
+    pub fn update_login_item(&self, status: crate::domain::LoginItemStatus, error: Option<String>) {
+        self.mutate(|state| {
+            state.data.login_item = status;
+            match error {
+                Some(error) => {
+                    state.data.node_errors.insert("login-item".into(), error);
+                }
+                None => {
+                    state.data.node_errors.remove("login-item");
+                }
+            }
+        });
+    }
     fn mutate(&self, update: impl FnOnce(&mut State)) {
         update(&mut self.state.lock().unwrap());
         crate::app::events::changed();
@@ -155,24 +175,6 @@ impl Backend {
             id,
             generation,
         })
-    }
-    pub fn tunnel_state(&self, id: &str, value: Option<TunnelState>) {
-        self.mutate(|state| match value {
-            Some(value) => {
-                state.tunnels.insert(id.into(), value);
-            }
-            None => {
-                state.tunnels.remove(id);
-            }
-        });
-    }
-    fn stop(&self, id: &str) {
-        self.tunnels.stop(id);
-        self.tunnel_state(id, None);
-    }
-    pub fn stop_all(&self) {
-        self.tunnels.stop_all();
-        self.mutate(|state| state.tunnels.clear());
     }
     pub fn shutdown(&self) {
         self.mutate(|state| state.generation += 1);

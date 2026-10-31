@@ -2,6 +2,7 @@
 mod account;
 mod disclosures;
 mod filters;
+mod general;
 mod inputs;
 mod menu;
 mod names;
@@ -24,6 +25,7 @@ use std::collections::{HashMap, HashSet};
 enum Tab {
     Services,
     Menu,
+    General,
     Account,
 }
 
@@ -39,6 +41,8 @@ pub struct SettingsView {
     query: String,
     selected_only: bool,
     _search_subscription: Subscription,
+    _activation_subscription: Subscription,
+    _login_item_watch: Option<Task<()>>,
     pub(crate) menu_selection: Vec<String>,
     name_fields: HashMap<String, NameField>,
 }
@@ -58,6 +62,12 @@ impl SettingsView {
                     this.search_changed(input.read(cx).value().to_string(), window, cx);
                 }
             });
+        let activation_subscription = cx.observe_window_activation(window, |_, window, _| {
+            if window.is_window_active() {
+                events::emit(events::Event::RefreshLoginItem);
+            }
+        });
+        let login_item_watch = (!snapshot.demo).then(|| Self::watch_login_item(window, cx));
         Self {
             tab: Tab::Services,
             snapshot,
@@ -70,6 +80,8 @@ impl SettingsView {
             query: String::new(),
             selected_only: false,
             _search_subscription: search_subscription,
+            _activation_subscription: activation_subscription,
+            _login_item_watch: login_item_watch,
             menu_selection: Vec::new(),
             name_fields: HashMap::new(),
         }

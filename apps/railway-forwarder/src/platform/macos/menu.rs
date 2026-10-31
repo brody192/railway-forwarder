@@ -7,7 +7,7 @@ use std::cell::RefCell;
 thread_local! {static MENU: RefCell<Option<StatusMenu>> = const {RefCell::new(None)};}
 pub fn initialize() {
     let menu = StatusMenu::new(
-        StatusItem::new("Railway Forwarder").symbol("point.3.filled.connected.trianglepath.dotted"),
+        StatusItem::new("Railway Forwarder").symbol("point.3.connected.trianglepath.dotted"),
         main_thread(),
         |event| match event {
             MenuEvent::WillOpen => events::render_menu(),
@@ -73,7 +73,8 @@ fn menu_model(snapshot: &Snapshot) -> (StatusItem, Menu) {
         .sections
         .iter()
         .flat_map(|section| &section.ports)
-        .any(|port| port.is_on);
+        .any(|port| port.is_on)
+        || (snapshot.signed_in && !snapshot.preferences.active_tunnels.is_empty());
     menu = menu
         .separator()
         .item(Action::new("disconnect", &layout.disconnect).enabled(active))
@@ -87,9 +88,9 @@ fn menu_model(snapshot: &Snapshot) -> (StatusItem, Menu) {
         .filter(|port| port.state.as_deref() == Some("connected"))
         .count();
     let symbol = if count > 0 {
-        "point.3.connected.trianglepath.dotted"
-    } else {
         "point.3.filled.connected.trianglepath.dotted"
+    } else {
+        "point.3.connected.trianglepath.dotted"
     };
     (
         StatusItem::new(format!("Railway Forwarder, {count} active tunnels")).symbol(symbol),
@@ -172,6 +173,7 @@ mod tests {
             ]
         );
         assert!(status.label.contains("0 active tunnels"));
+        assert_eq!(status.symbol, "point.3.connected.trianglepath.dotted");
         assert!(snapshot.preferences.menu.names.is_empty());
 
         let title = rows
@@ -190,7 +192,15 @@ mod tests {
             ),
         ] {
             backend.tunnel_state(&first, Some(state));
-            let (_, menu) = menu_model(&backend.snapshot());
+            let (status, menu) = menu_model(&backend.snapshot());
+            assert_eq!(
+                status.symbol,
+                if on && !busy {
+                    "point.3.filled.connected.trianglepath.dotted"
+                } else {
+                    "point.3.connected.trianglepath.dotted"
+                }
+            );
             let row = menu
                 .items
                 .iter()
@@ -211,5 +221,16 @@ mod tests {
                 }
             );
         }
+        let disconnect_enabled = |snapshot: &Snapshot| {
+            menu_model(snapshot).1.items.iter().any(|item| {
+                matches!(item, Item::Action(action) if action.id == "disconnect" && action.enabled)
+            })
+        };
+        // A failed remembered tunnel can still be explicitly disconnected,
+        // preventing it from being restored on the next launch.
+        assert!(disconnect_enabled(&backend.snapshot()));
+        backend.dispatch(serde_json::json!({"action":"disconnect"}));
+        assert!(!disconnect_enabled(&backend.snapshot()));
+        assert!(backend.snapshot().preferences.active_tunnels.is_empty());
     }
 }

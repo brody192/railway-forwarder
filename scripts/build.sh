@@ -32,10 +32,12 @@ mv -f "$app/Contents/MacOS/RailwayForwarder.new" "$app/Contents/MacOS/RailwayFor
 rm -f "$app/Contents/Frameworks/libForwarderNative.dylib"
 if [[ -d "$app/Contents/Frameworks" ]]; then rmdir "$app/Contents/Frameworks" 2>/dev/null || true; fi
 cp apps/railway-forwarder/resources/Info.plist "$app/Contents/Info.plist"
+cp apps/railway-forwarder/resources/icons/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 binary_sdk="$(xcrun vtool -show-build "$app/Contents/MacOS/RailwayForwarder" | awk '$1 == "sdk" { print $2; exit }')"
 if [[ -z "$binary_sdk" ]] || (( ${binary_sdk%%.*} < 26 )); then
   printf 'The app must identify macOS SDK 26 or later for Liquid Glass.\n' >&2
   exit 1
 fi
 codesign --force --sign - --identifier com.brody.railway-forwarder "$app"
+touch "$app"
 printf 'Built %s/%s\n' "$PWD" "$app"
