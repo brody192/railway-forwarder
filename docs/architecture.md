@@ -24,6 +24,7 @@ apps/
           demo.rs            In-memory preview data
           tests.rs           State and command regression tests
       domain/
+        account.rs           In-memory account photo data
         resources.rs         Workspace > project > environment > service
         ports.rs             Allowed ports, identities and tunnel states
         preferences.rs       Persisted user preferences
@@ -34,6 +35,7 @@ apps/
         catalog.rs           Pure search and selection filtering
       integrations/
         railway/
+          account.rs         OAuth profile metadata and bounded photo retrieval
           auth.rs            OAuth, session refresh and Railway HTTP errors
           client.rs          Railway API calls and catalog mapping
           graphql.rs         Typed GraphQL operations and response validation
@@ -43,12 +45,14 @@ apps/
           menu.rs            App model and SDK event translation
           oauth.rs           AuthenticationServices browser sessions
           login_item.rs      ServiceManagement main-app login registration
+          settings.rs        Native window chrome and Finder-style sidebar backdrop
           preview.rs         Native control review window
       ui/
-        controls.rs          Shared button cursors and disabled-state styling
+        controls.rs          macOS control sizing, cursors and pointer focus
         settings/
           mod.rs             Settings state, subscriptions and refresh
           view.rs            Window frame, sidebar and active tab
+          style.rs           macOS page headings, sidebar symbols and settings groups
           services.rs        Resource tree, services and port rows
           filters.rs         Search, selected ports and disclosure state
           disclosures.rs     Manual tree choices and automatic reveal ownership
@@ -86,6 +90,8 @@ scripts/                     Workspace checks and app packaging
 ```
 
 ## Boundaries
+
+Settings uses `gpui-macos` 0.1.1 for native window integration, runtime SF Symbols, and macOS-themed GPUI controls. The macOS settings adapter owns the native split-view sidebar backdrop and its lifetime. The matching framework, `gpui-macos-kit` 0.7.1-macos.1, is aliased as `gpui-kit` so the application and design system share one GPUI type graph. Do not add a second upstream GPUI Kit dependency alongside it. The platform adapter configures a transparent native title bar with no toolbar. Only the sidebar reserves space for the native window controls; pane headings use the content's ordinary top padding. The app applies an explicit dark appearance and retains its existing backend, persistence, search/disclosure state and native menu SDK.
 
 `main.rs` only declares top-level modules and calls the app. The app layer owns state and background work. Domain modules transform ordinary Rust values without network, storage or UI access. UI modules submit commands through `app::events` and render snapshots. Platform modules adapt native macOS APIs. Integration modules translate Railway concepts into provider requests or generic SSH SDK calls.
 

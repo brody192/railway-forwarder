@@ -1,4 +1,5 @@
 //! Railway authentication, typed GraphQL requests and catalog mapping.
+mod account;
 pub(crate) mod auth;
 mod client;
 mod graphql;

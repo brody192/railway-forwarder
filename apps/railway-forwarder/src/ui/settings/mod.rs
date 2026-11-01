@@ -8,9 +8,10 @@ mod menu;
 mod names;
 mod results;
 mod services;
+mod style;
 mod view;
 use crate::app::events;
-use crate::domain::Snapshot;
+use crate::domain::{AccountPhoto, Snapshot};
 use disclosures::Disclosures;
 use gpui_kit::{
     component::input::{InputEvent, InputState},
@@ -20,6 +21,7 @@ use names::NameField;
 use results::SearchResults;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Tab {
@@ -28,6 +30,19 @@ enum Tab {
     General,
     Account,
 }
+
+impl Tab {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Services => "Services",
+            Self::Menu => "Menu",
+            Self::General => "General",
+            Self::Account => "Account",
+        }
+    }
+}
+
+const SIDEBAR_WIDTH: f32 = 220.;
 
 pub struct SettingsView {
     pub(crate) snapshot: Snapshot,
@@ -42,14 +57,28 @@ pub struct SettingsView {
     selected_only: bool,
     _search_subscription: Subscription,
     _activation_subscription: Subscription,
+    _window_chrome: Option<crate::platform::macos::settings::WindowChrome>,
     _login_item_watch: Option<Task<()>>,
+    profile_image: Option<(Arc<AccountPhoto>, Arc<Image>)>,
     pub(crate) menu_selection: Vec<String>,
     name_fields: HashMap<String, NameField>,
 }
 
 impl SettingsView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let snapshot = Self::read_snapshot();
+        let mut snapshot = Self::read_snapshot();
+        let window_chrome = match crate::platform::macos::settings::configure_window(
+            window,
+            SIDEBAR_WIDTH as f64,
+        ) {
+            Ok(chrome) => Some(chrome),
+            Err(error) => {
+                snapshot.error = Some(format!(
+                    "Could not configure the macOS settings window. {error:#}"
+                ));
+                None
+            }
+        };
         let client_id = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Automatic registration")
@@ -62,12 +91,14 @@ impl SettingsView {
                     this.search_changed(input.read(cx).value().to_string(), window, cx);
                 }
             });
-        let activation_subscription = cx.observe_window_activation(window, |_, window, _| {
+        let activation_subscription = cx.observe_window_activation(window, |_, window, cx| {
             if window.is_window_active() {
                 events::emit(events::Event::RefreshLoginItem);
             }
+            cx.notify();
         });
         let login_item_watch = (!snapshot.demo).then(|| Self::watch_login_item(window, cx));
+        let profile_image = Self::make_profile_image(&snapshot);
         Self {
             tab: Tab::Services,
             snapshot,
@@ -81,7 +112,9 @@ impl SettingsView {
             selected_only: false,
             _search_subscription: search_subscription,
             _activation_subscription: activation_subscription,
+            _window_chrome: window_chrome,
             _login_item_watch: login_item_watch,
+            profile_image,
             menu_selection: Vec::new(),
             name_fields: HashMap::new(),
         }
@@ -107,6 +140,7 @@ impl SettingsView {
             self.name_fields.clear();
         }
         self.snapshot = snapshot;
+        self.sync_profile_image();
         let latest = self.filtered_catalog();
         self.search_results
             .receive_requested_projects(&latest, &self.snapshot.loaded_projects);

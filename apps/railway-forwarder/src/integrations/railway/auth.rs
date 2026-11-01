@@ -95,27 +95,6 @@ impl OAuth {
         .await?;
         Ok(session.tokens.as_ref().unwrap().access_token.clone())
     }
-    pub async fn email(&self) -> Result<String> {
-        #[derive(Deserialize)]
-        struct Profile {
-            email: String,
-        }
-        let token = self.access_token().await?;
-        let profile: Profile = send(
-            self.http
-                .get(format!("{ISSUER}/oauth/me"))
-                .bearer_auth(token),
-        )
-        .await?
-        .json()
-        .await
-        .context("Could not read the Railway account profile.")?;
-        let email = profile.email.trim();
-        if email.is_empty() {
-            bail!("Railway returned no account email.");
-        }
-        Ok(email.into())
-    }
     pub async fn sign_in(&self, override_id: &str) -> Result<()> {
         let mut session = self.session.lock().await;
         if !override_id.trim().is_empty() {

@@ -4,49 +4,76 @@ use gpui_kit::{
     component::{ActiveTheme, Sizable, button::ButtonVariants, input::Input, spinner::Spinner},
     *,
 };
+use gpui_macos::ActiveTheme as _;
 use serde_json::json;
 
-use super::{SettingsView, Tab, inputs::input_boundary};
+use super::{SIDEBAR_WIDTH, SettingsView, Tab, inputs::input_boundary, style};
 impl Render for SettingsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let toolbar_inset = gpui_macos::native::native_toolbar_inset(window);
+        let active = window.is_window_active();
         let mut sidebar = div()
+            .id("settings-sidebar")
             .v_flex()
-            .gap_2()
+            .w(px(SIDEBAR_WIDTH))
             .h_full()
-            .w(px(172.))
             .flex_shrink_0()
-            .p_3()
-            .border_r_1()
-            .border_color(cx.theme().border)
-            .bg(cx.theme().sidebar)
-            .child(
-                div()
-                    .px_2()
-                    .pt_2()
-                    .pb_4()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Railway Forwarder"),
-            );
-        for (tab, id, label, icon) in [
-            (Tab::Services, "services", "Services", IconName::Server),
-            (Tab::Menu, "menu", "Menu", IconName::List),
-            (Tab::General, "general", "General", IconName::Settings),
-            (Tab::Account, "account", "Account", IconName::User),
+            .p_2()
+            .font_family(cx.macos().font.clone())
+            .bg(if active {
+                transparent_black()
+            } else {
+                rgb(0x242c32).into()
+            })
+            .gap_1()
+            .pt(toolbar_inset.max(px(52.)));
+        for (tab, id) in [
+            (Tab::Services, "services"),
+            (Tab::Menu, "menu"),
+            (Tab::General, "general"),
+            (Tab::Account, "account"),
         ] {
+            let selected = self.tab == tab;
+            let fill = style::selection_fill(selected, window, cx);
             sidebar = sidebar.child(
-                button(id)
-                    .ghost()
-                    .accessibility_label(label)
+                gpui_macos::button(id, "", gpui_macos::ButtonVariant::Secondary, cx)
+                    .accessibility_label(tab.title())
+                    .aria_selected(selected)
+                    .h(px(34.))
+                    .w_full()
+                    .px_2()
+                    .py_1()
+                    .rounded(px(8.))
+                    .justify_start()
+                    .gap_2()
+                    .border_0()
+                    .bg(fill)
+                    .hover(move |style| style.bg(fill))
+                    .child(
+                        gpui_macos::icon(tab.icon())
+                            .size(px(22.))
+                            .text_color(if active {
+                                cx.macos().accent
+                            } else {
+                                cx.macos().secondary
+                            }),
+                    )
                     .child(
                         div()
-                            .h_flex()
-                            .w_full()
-                            .gap_2()
-                            .child(gpui_kit::component::Icon::new(icon).size_4())
-                            .child(label),
+                            .text_size(px(13.))
+                            .font_weight(if selected {
+                                FontWeight::MEDIUM
+                            } else {
+                                FontWeight::NORMAL
+                            })
+                            .text_color(if active {
+                                cx.macos().foreground
+                            } else {
+                                cx.macos().secondary
+                            })
+                            .child(tab.title()),
                     )
-                    .w_full()
-                    .when(self.tab == tab, |button| button.bg(cx.theme().secondary))
+                    .cursor_pointer()
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.tab = tab;
                         if tab == Tab::General {
@@ -66,7 +93,13 @@ impl Render for SettingsView {
                     .child("Preview"),
             );
         }
-        let mut body = div().v_flex().h_full().flex_1().min_w_0().gap_4().p_6();
+        let mut body = div()
+            .v_flex()
+            .size_full()
+            .min_w_0()
+            .gap_5()
+            .p_6()
+            .bg(cx.theme().background);
         if let Some(error) = &self.snapshot.error {
             body =
                 body.child(
@@ -88,33 +121,37 @@ impl Render for SettingsView {
                 );
         }
         if self.tab == Tab::Account {
-            body = body.child(self.account(cx));
+            body = body
+                .child(style::page_heading(self.tab))
+                .child(self.account(cx));
         } else if self.tab == Tab::Menu {
             body = body.child(self.menu_editor(window, cx));
         } else if self.tab == Tab::General {
-            body = body.child(self.general(window, cx));
+            body = body
+                .child(style::page_heading(self.tab))
+                .child(self.general(window, cx));
         } else {
             body = body.child(
                 div()
                     .h_flex()
                     .items_center()
                     .gap_3()
-                    .child(
-                        div()
-                            .text_xl()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .flex_1()
-                            .child("Services"),
-                    )
+                    .child(style::page_heading(self.tab).flex_1())
                     .child(
                         button("selected-ports")
                             .ghost()
+                            .h(px(30.))
+                            .rounded_full()
                             .icon(IconName::Info)
                             .label(format!(
                                 "{} ports selected",
                                 self.snapshot.preferences.allowed.len()
                             ))
-                            .when(self.selected_only, |button| button.bg(cx.theme().secondary))
+                            .when(self.selected_only, |button| {
+                                button
+                                    .bg(cx.macos().accent.opacity(0.2))
+                                    .text_color(cx.macos().accent)
+                            })
                             .disabled_with_cursor(
                                 self.snapshot.preferences.allowed.is_empty() && !self.selected_only,
                             )
@@ -126,17 +163,6 @@ impl Render for SettingsView {
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.toggle_selected(window, cx)),
                             ),
-                    )
-                    .child(
-                        button("refresh")
-                            .label("Refresh")
-                            .disabled_with_cursor(
-                                !self.snapshot.signed_in
-                                    || self.snapshot.loading.contains(&"workspaces".into()),
-                            )
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.send(json!({"action":"refresh"}), cx);
-                            })),
                     ),
             );
             body = body.child(
@@ -165,7 +191,7 @@ impl Render for SettingsView {
                                 )
                                 .disabled(!self.snapshot.signed_in)
                                 .aria_label("Search services")
-                                .h(px(32.)),
+                                .h(px(30.)).rounded_full(),
                             cx,
                         )
                         .min_w_0()
@@ -174,11 +200,18 @@ impl Render for SettingsView {
                     .child(
                         button("clear-filters")
                             .label("Clear")
-                            .h(px(32.))
+                            .h(px(30.)).rounded_full()
                             .disabled_with_cursor(!self.selected_only && self.query.is_empty())
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.clear_filters(window, cx)),
                             ),
+                    )
+                    .child(
+                        button("refresh").icon(IconName::RotateCw)
+                            .size(px(30.)).p_0().rounded_full()
+                            .accessibility_label("Refresh").tooltip("Refresh projects")
+                            .disabled_with_cursor(!self.snapshot.signed_in || self.snapshot.loading.contains(&"workspaces".into()))
+                            .on_click(cx.listener(|this, _, _, cx| this.send(json!({"action":"refresh"}), cx))),
                     ),
             );
             if !self.snapshot.signed_in {
@@ -208,14 +241,27 @@ impl Render for SettingsView {
             }
         }
         div()
-            .h_flex()
             .key_context("ForwarderSettings")
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    if !this.menu_selection.is_empty() {
+                        window.blur(cx);
+                        this.menu_selection.clear();
+                        cx.notify();
+                    }
+                }),
+            )
             .on_action(|_: &crate::app::CloseSettings, window, _| window.remove_window())
             .size_full()
-            .bg(cx.theme().background)
-            .text_color(cx.theme().foreground)
-            .text_sm()
-            .child(sidebar)
-            .child(body)
+            .child(
+                gpui_macos::focus_scope("settings-focus")
+                    .h_flex()
+                    .size_full()
+                    .text_color(cx.theme().foreground)
+                    .text_size(px(13.))
+                    .child(sidebar)
+                    .child(div().flex_1().min_w_0().h_full().child(body)),
+            )
     }
 }

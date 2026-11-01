@@ -36,6 +36,11 @@ fn sign_out_preserves_saved_ports_and_menu_preferences_across_restarts() {
     assert!(backend.snapshot().signed_in);
     backend.mutate(|state| {
         state.data.email = Some("you@example.com".into());
+        state.data.account_name = Some("Test User".into());
+        state.data.account_photo = Some(Arc::new(crate::domain::AccountPhoto {
+            mime_type: "image/png".into(),
+            bytes: vec![1, 2, 3],
+        }));
         state.data.login_item = crate::domain::LoginItemStatus::Enabled;
         state.data.workspaces = data.workspaces;
     });
@@ -54,6 +59,8 @@ fn sign_out_preserves_saved_ports_and_menu_preferences_across_restarts() {
     let signed_out = backend.snapshot();
     assert!(!signed_out.signed_in);
     assert!(signed_out.email.is_none());
+    assert!(signed_out.account_name.is_none());
+    assert!(signed_out.account_photo.is_none());
     assert_eq!(
         signed_out.login_item,
         crate::domain::LoginItemStatus::Enabled

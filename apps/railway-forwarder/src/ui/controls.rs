@@ -1,17 +1,23 @@
 //! Shared interaction styling for settings controls.
 use gpui_kit::{
-    component::{Disableable, button::Button, switch::Switch},
+    component::{Disableable, button::Button},
     *,
 };
 
 pub(super) fn button(id: impl Into<ElementId>) -> Button {
-    Button::new(id).cursor_pointer()
+    Button::new(id)
+        .h(px(24.))
+        .px(px(10.))
+        .rounded(px(6.))
+        .text_size(px(13.))
+        .font_weight(FontWeight::NORMAL)
+        .cursor_pointer()
 }
 
 /// Keep pointer activation separate from keyboard focus, as settings buttons do.
 pub(super) fn switch_boundary(
     id: impl Into<ElementId>,
-    switch: Switch,
+    switch: impl IntoElement,
     window: &mut Window,
     cx: &mut App,
 ) -> Stateful<Div> {

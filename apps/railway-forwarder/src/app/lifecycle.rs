@@ -1,29 +1,28 @@
 use super::{CloseSettings, Quit, backend, events};
 use crate::{platform::macos, ui::settings};
-use gpui_kit::component::{Theme, ThemeMode};
 use gpui_kit::*;
 use settings::SettingsView;
 
 fn update_theme(cx: &mut App) {
-    Theme::change(ThemeMode::Dark, None, cx);
-    Theme::update(cx, |theme| {
-        theme.colors.primary = rgb(0x007aff).into();
-        theme.colors.primary_hover = rgb(0x0066df).into();
-        theme.colors.primary_foreground = rgb(0xffffff).into();
-    });
+    let mut theme = gpui_macos::Theme::dark().with_accent(rgb(0x007aff).into());
+    theme.background = rgb(0x202326).into();
+    theme.surface = rgb(0x292a2e).into();
+    theme.inset = rgb(0x2a2b2f).into();
+    theme.apply(cx);
 }
 
 fn open_settings(cx: &mut App) -> Result<(AnyWindowHandle, Entity<SettingsView>)> {
-    let bounds = Bounds::centered(None, size(px(900.), px(700.)), cx);
-    let result = gpui_kit::open_window(
+    let bounds = Bounds::centered(None, size(px(920.), px(660.)), cx);
+    let mut options = gpui_macos::native_window_options("Settings", cx);
+    if let Some(titlebar) = &mut options.titlebar {
+        // Match Finder's inset while keeping the native AppKit window buttons.
+        titlebar.traffic_light_position = Some(point(px(19.), px(19.)));
+    }
+    let result = gpui_macos::open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             window_min_size: Some(size(px(740.), px(520.))),
-            titlebar: Some(TitlebarOptions {
-                title: Some("Railway Forwarder".into()),
-                ..Default::default()
-            }),
-            ..Default::default()
+            ..options
         },
         cx,
         |window, cx| cx.new(|cx| SettingsView::new(window, cx)),
@@ -62,11 +61,11 @@ pub(crate) fn run() {
         }
         return;
     }
-    let application = gpui_kit::application()
-        .with_assets(gpui_kit::assets::AllAssets)
+    let application = gpui_macos::application()
+        .with_assets(gpui_macos::NativeAssets::new(gpui_kit::assets::AllAssets))
         .with_quit_mode(QuitMode::Explicit);
     application.run(|cx| {
-        gpui_kit::init(cx);
+        gpui_macos::init(cx);
         update_theme(cx);
         cx.bind_keys([
             KeyBinding::new("cmd-q", Quit, None),

@@ -2,10 +2,7 @@ use crate::domain::{Environment, Port, Project, Service, Workspace, preferred_po
 use crate::ui::controls::{ButtonCursorExt, button};
 use gpui_kit::{assets::IconName, base::StyledExt, prelude::FluentBuilder};
 use gpui_kit::{
-    component::{
-        ActiveTheme, Sizable, button::ButtonVariants, checkbox::Checkbox, input::Input,
-        spinner::Spinner,
-    },
+    component::{ActiveTheme, Sizable, button::ButtonVariants, input::Input, spinner::Spinner},
     *,
 };
 use serde_json::{Value, json};
@@ -406,37 +403,53 @@ impl SettingsView {
         command["action"] = "allowPort".into();
         command["port"] = json!(port);
         let field_id = format!("local/{id}");
+        let selection_change = cx.listener(move |this: &mut Self, checked: &bool, _, cx| {
+            if !checked {
+                this.inputs.remove(&field_id);
+                // One visible IPv6 row can represent saved listeners
+                // on several addresses. Clear all of its selections.
+                for selection in &selections {
+                    let mut command = command.clone();
+                    command["port"] = json!(selection.remote);
+                    command["enabled"] = false.into();
+                    this.send(command, cx);
+                }
+                return;
+            }
+            let mut command = command.clone();
+            command["enabled"] = (*checked).into();
+            this.send(command, cx);
+        });
         let mut row = div()
             .h_flex()
             .items_center()
             .gap(px(PORT_CONTENT_SPACING))
             .min_h(px(28.))
             .child(
-                Checkbox::new(SharedString::from(format!("allow/{id}")))
-                    .cursor_pointer()
-                    .label(port.port.to_string())
-                    .checked(selection.is_some())
-                    .on_change(cx.listener(move |this, checked: &bool, _, cx| {
-                        if !checked {
-                            this.inputs.remove(&field_id);
-                            // One visible IPv6 row can represent saved listeners
-                            // on several addresses. Clear all of its selections.
-                            for selection in &selections {
-                                let mut command = command.clone();
-                                command["port"] = json!(selection.remote);
-                                command["enabled"] = false.into();
-                                this.send(command, cx);
-                            }
-                            return;
-                        }
-                        let mut command = command.clone();
-                        command["enabled"] = (*checked).into();
-                        this.send(command, cx);
-                    })),
+                gpui_macos::checkbox(
+                    SharedString::from(format!("allow/{id}")),
+                    port.port.to_string(),
+                    if selection.is_some() {
+                        gpui_kit::base::CheckboxState::Checked
+                    } else {
+                        gpui_kit::base::CheckboxState::Unchecked
+                    },
+                    cx,
+                )
+                .self_center()
+                .cursor_pointer()
+                .on_change(move |state, _, window, cx| {
+                    selection_change(
+                        &(state == gpui_kit::base::CheckboxState::Checked),
+                        window,
+                        cx,
+                    );
+                }),
             )
             .child(
                 div()
-                    .text_sm()
+                    .text_size(px(13.))
+                    .line_height(relative(1.2))
                     .text_color(cx.theme().muted_foreground)
                     .child(port.host.clone()),
             )

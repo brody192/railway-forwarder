@@ -44,7 +44,7 @@ impl Backend {
     pub fn check_catalog() -> Result<()> {
         let backend = Self::new(false)?;
         backend.runtime.block_on(async {
-            backend.api.oauth.email().await?;
+            backend.api.oauth.profile().await?;
             let workspaces = backend.api.workspaces().await?;
             let selected: std::collections::HashSet<_> = backend
                 .state

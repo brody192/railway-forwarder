@@ -8,23 +8,46 @@ impl Backend {
         let Some(_loading) = self.loading("account", generation) else {
             return;
         };
-        let result = self.api.oauth.email().await;
+        let result = self.api.oauth.profile().await;
+        let picture = result
+            .as_ref()
+            .ok()
+            .and_then(|profile| profile.picture.clone());
         self.mutate(|state| {
             if state.generation == generation {
                 match result {
-                    Ok(email) => {
-                        state.data.email = Some(email);
+                    Ok(profile) => {
+                        state.data.email = Some(profile.email);
+                        state.data.account_name = profile.name;
+                        state.data.account_photo = None;
                         state.data.node_errors.remove("account");
                     }
                     Err(error) => {
                         state.data.node_errors.insert(
                             "account".into(),
-                            format!("Could not load your Railway account email. {error}"),
+                            format!("Could not load your Railway account. {error}"),
                         );
                     }
                 }
             }
         });
+        if let Some(picture) = picture {
+            if self.state.lock().unwrap().generation != generation {
+                return;
+            }
+            let photo = self
+                .api
+                .oauth
+                .profile_photo(&picture)
+                .await
+                .ok()
+                .map(Arc::new);
+            self.mutate(|state| {
+                if state.generation == generation && state.data.signed_in {
+                    state.data.account_photo = photo;
+                }
+            });
+        }
     }
 
     pub(super) fn sign_in(self: &Arc<Self>) {
@@ -52,6 +75,8 @@ impl Backend {
                         Ok(()) => {
                             state.data.signed_in = true;
                             state.data.email = None;
+                            state.data.account_name = None;
+                            state.data.account_photo = None;
                             state.data.node_errors.remove("account");
                         }
                         Err(error) if error.to_string() == "Sign in was canceled." => {}
@@ -93,6 +118,8 @@ impl Backend {
                         Ok(()) => {
                             state.data.signed_in = false;
                             state.data.email = None;
+                            state.data.account_name = None;
+                            state.data.account_photo = None;
                             state.data.workspaces.clear();
                             state.data.ports.clear();
                             state.data.scanned.clear();

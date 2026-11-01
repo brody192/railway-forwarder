@@ -3,6 +3,7 @@ pub(crate) mod login_item;
 mod menu;
 mod oauth;
 mod preview;
+pub(crate) mod settings;
 pub(crate) use menu::{initialize, render, show_menu};
 pub(crate) use oauth::{authenticate, cancel_auth, finish_auth};
 use objc2::rc::Retained;

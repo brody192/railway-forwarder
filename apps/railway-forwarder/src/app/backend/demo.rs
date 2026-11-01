@@ -2,6 +2,7 @@ use crate::domain::{AllowedPort, Environment, Port, Project, Service, Snapshot, 
 pub(super) fn seed_demo(data: &mut Snapshot) {
     data.signed_in = true;
     data.email = Some("you@example.com".into());
+    data.account_name = Some("Demo User".into());
     data.workspaces = vec![
         Workspace {
             id: "w1".into(),
